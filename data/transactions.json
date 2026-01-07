@@ -1,0 +1,16 @@
+[
+  {
+    "tx_id": "T001",
+    "account": "ACC1001",
+    "amount": 15000,
+    "city": "Delhi",
+    "time": "10:05"
+  },
+  {
+    "tx_id": "T002",
+    "account": "ACC1001",
+    "amount": 220000,
+    "city": "Mumbai",
+    "time": "10:12"
+  }
+]
