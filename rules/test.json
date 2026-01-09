@@ -1,0 +1,17 @@
+{
+  "transactions": [
+    {
+      "date": "2025-01-01",
+      "time": "10:00",
+      "amount": 250000,
+      "location": "Delhi"
+    },
+    {
+      "date": "2025-01-01",
+      "time": "10:05",
+      "amount": 10000,
+      "location": "Mumbai"
+    }
+  ]
+}
+

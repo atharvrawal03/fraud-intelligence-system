@@ -1,31 +1,47 @@
 from fastapi import FastAPI
-import subprocess, json
-from ml.features import build_features
-from ml.supervised import fraud_probability
-from ml.anomaly import anomaly_score
-from ml.decision import final_decision
-from profiles.profile_check import profile_risk
-from ml.explain import explain
+import subprocess
+import json
+import os
 
 app = FastAPI()
 
-@app.post("/analyze")
-def analyze(tx: dict):
-    output = subprocess.check_output(
-        ["../rules/rule_engine"],
-        input=str(tx["amount"]).encode()
-    )
-    rule = json.loads(output)["rule_amount"]
 
-    features = build_features(tx)
-    decision = final_decision(
-        rule,
-        fraud_probability(features),
-        anomaly_score(tx["amount"]),
-        profile_risk(tx["account"], tx["amount"], tx["city"])
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CPP_ENGINE_PATH = os.path.join(BASE_DIR, "rules", "rule_engine")
+
+def run_cpp_engine(transactions):
+
+    payload = {
+        "transactions": transactions
+    }
+
+    result = subprocess.run(
+        [CPP_ENGINE_PATH],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True
     )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"C++ Engine Error:\n{result.stderr}"
+        )
+
+    return json.loads(result.stdout)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/analyze")
+def analyze(request: dict):
+
+    if "transactions" not in request:
+        return {"error": "Missing 'transactions' key in request"}
+
+    cpp_result = run_cpp_engine(request["transactions"])
 
     return {
-        "decision": decision,
-        "explanation": explain(features)
+        "cpp_rules": cpp_result
     }
