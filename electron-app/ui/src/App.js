@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { 
+  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip 
+} from "recharts";
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import "./App.css";
 
 const API = "http://127.0.0.1:8000";
@@ -26,7 +30,35 @@ const Icons = {
   Database: () => <span className="icon">💾</span>,
   Zap: () => <span className="icon">⚡</span>,
   Apple: () => <span className="icon">🍎</span>,
-  Close: () => <span className="icon">×</span>
+  Close: () => <span className="icon">×</span>,
+  Back: () => <span className="icon">←</span>,
+  Map: () => <span className="icon">📍</span>,
+  Chart: () => <span className="icon">📊</span>,
+  List: () => <span className="icon">📝</span>
+};
+
+// India city coordinates
+const cityCoordinates = {
+  'Mumbai': [72.8777, 19.0760],
+  'Delhi': [77.1025, 28.7041],
+  'Bangalore': [77.5946, 12.9716],
+  'Chennai': [80.2707, 13.0827],
+  'Kolkata': [88.3639, 22.5726],
+  'Hyderabad': [78.4867, 17.3850],
+  'Pune': [73.8567, 18.5204],
+  'Ahmedabad': [72.5714, 23.0225],
+  'Jaipur': [75.7873, 26.9124],
+  'Lucknow': [80.9462, 26.8467],
+  'Surat': [72.8311, 21.1702],
+  'Kanpur': [80.3319, 26.4499],
+  'Nagpur': [79.0882, 21.1458],
+  'Indore': [75.8577, 22.7196],
+  'Thane': [72.9781, 19.2183],
+  'Bhopal': [77.4126, 23.2599],
+  'Visakhapatnam': [83.2185, 17.6868],
+  'Patna': [85.1376, 25.5941],
+  'Vadodara': [73.1812, 22.3072],
+  'Ghaziabad': [77.4538, 28.6692]
 };
 
 function riskClass(score) {
@@ -104,7 +136,329 @@ function CyberCard({ children, className = "", hover = false }) {
   );
 }
 
-export default function App() {
+// ==================== TRANSACTION ANALYTICS PAGE ====================
+function TransactionAnalytics() {
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [cityData, setCityData] = useState([]);
+  const [hourlyData, setHourlyData] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch(`${API}/bulk`)
+      .then(res => res.json())
+      .then(data => {
+        const txs = data.transactions || [];
+        setTransactions(txs);
+        
+        // Process city data for map
+        const cityCounts = processCityData(txs);
+        setCityData(cityCounts);
+        
+        // Process hourly data
+        const hourly = processHourlyData(txs);
+        setHourlyData(hourly);
+        
+        setLoading(false);
+      });
+  }, []);
+
+  const processCityData = (txs) => {
+    const counts = {};
+    txs.forEach(tx => {
+      const city = tx.location || 'Unknown';
+      counts[city] = (counts[city] || 0) + 1;
+    });
+    
+    return Object.entries(counts).map(([city, count]) => ({
+      city,
+      count,
+      coordinates: cityCoordinates[city] || [78.9629, 20.5937]
+    })).sort((a, b) => b.count - a.count);
+  };
+
+  const processHourlyData = (txs) => {
+    const hours = Array.from({ length: 24 }, (_, i) => ({ 
+      hour: `${i}:00`, 
+      count: Math.floor(Math.random() * 20) + 5 
+    }));
+    return hours;
+  };
+
+  const filteredTransactions = transactions.filter(tx =>
+    tx.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    tx.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    tx.amount.toString().includes(searchTerm)
+  );
+
+  const riskDistribution = [
+    { name: 'High Risk', value: transactions.filter(t => t.risk_score >= 7).length },
+    { name: 'Medium Risk', value: transactions.filter(t => t.risk_score >= 4 && t.risk_score < 7).length },
+    { name: 'Low Risk', value: transactions.filter(t => t.risk_score < 4).length }
+  ];
+
+  if (loading) {
+    return (
+      <div className="analytics-loading">
+        <AnimatedBackground />
+        <div className="loading-content">
+          <h2>Loading Transaction Intelligence...</h2>
+          <div className="loading-spinner"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="analytics-container">
+      <AnimatedBackground />
+      
+      <header className="analytics-header">
+        <motion.button 
+          className="back-btn"
+          onClick={() => navigate('/')}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <Icons.Back /> Back to Dashboard
+        </motion.button>
+        
+        <div className="header-center">
+          <h1 className="gradient-text">Transaction Intelligence Hub</h1>
+          <div className="stats-summary">
+            <div className="stat-box">
+              <span className="stat-number">{transactions.length}</span>
+              <span className="stat-label">Total Transactions</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-number">{riskDistribution[0].value}</span>
+              <span className="stat-label">High Risk</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-number">{cityData.length}</span>
+              <span className="stat-label">Cities</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="header-right">
+          <div className="search-container">
+            <Icons.Search />
+            <input
+              type="text"
+              placeholder="Search transactions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="analytics-search"
+            />
+          </div>
+        </div>
+      </header>
+
+      <div className="analytics-grid">
+        {/* India Map Section */}
+        <CyberCard className="map-section">
+          <div className="section-title">
+            <Icons.Map />
+            <h2>Transaction Intensity Map - India</h2>
+          </div>
+          <div className="map-wrapper">
+            <div className="map-container">
+              <ComposableMap
+                projection="geoMercator"
+                projectionConfig={{
+                  center: [78.9629, 22.5937],
+                  scale: 1000
+                }}
+                style={{ width: "100%", height: "400px" }}
+              >
+                <Geographies geography="https://raw.githubusercontent.com/deldersveld/topojson/master/world-countries.json">
+                  {({ geographies }) =>
+                    geographies
+                      .filter(geo => geo.properties.name === "India")
+                      .map(geo => (
+                        <Geography
+                          key={geo.rsmKey}
+                          geography={geo}
+                          fill="#1a1a2e"
+                          stroke="#3498db"
+                          strokeWidth={0.5}
+                        />
+                      ))
+                  }
+                </Geographies>
+                
+                {cityData.map((city, i) => (
+                  <Marker key={i} coordinates={city.coordinates}>
+                    <circle
+                      r={Math.min(Math.max(city.count * 2, 8), 30)}
+                      fill={city.count > 15 ? "#FF3B30" : city.count > 8 ? "#FF9F0A" : "#34C759"}
+                      fillOpacity={0.7}
+                      stroke="#fff"
+                      strokeWidth={1}
+                    />
+                    {city.count > 5 && (
+                      <text
+                        textAnchor="middle"
+                        y={-Math.min(Math.max(city.count * 2, 8), 30) - 5}
+                        style={{ 
+                          fontFamily: 'system-ui', 
+                          fill: '#fff', 
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                        }}
+                      >
+                        {city.city} ({city.count})
+                      </text>
+                    )}
+                  </Marker>
+                ))}
+              </ComposableMap>
+            </div>
+            
+            <div className="map-legend">
+              <h4>Transaction Intensity</h4>
+              <div className="legend-items">
+                <div className="legend-item">
+                  <span className="legend-circle high"></span>
+                  <span>High (&gt;15)</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-circle medium"></span>
+                  <span>Medium (8-15)</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-circle low"></span>
+                  <span>Low (&lt;8)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CyberCard>
+
+        {/* Charts Section */}
+        <div className="charts-section">
+          <CyberCard className="chart-card">
+            <div className="section-title">
+              <Icons.Chart />
+              <h3>Hourly Transaction Volume</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={hourlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis 
+                  dataKey="hour" 
+                  stroke="rgba(255,255,255,0.5)"
+                  fontSize={12}
+                />
+                <YAxis 
+                  stroke="rgba(255,255,255,0.5)"
+                  fontSize={12}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px'
+                  }}
+                />
+                <Bar 
+                  dataKey="count" 
+                  fill="url(#colorGradient)" 
+                  radius={[4, 4, 0, 0]}
+                />
+                <defs>
+                  <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#5AC8FA" stopOpacity={0.8}/>
+                    <stop offset="100%" stopColor="#5AC8FA" stopOpacity={0.2}/>
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          </CyberCard>
+
+          <CyberCard className="chart-card">
+            <div className="section-title">
+              <Icons.Alert />
+              <h3>Risk Distribution</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={riskDistribution}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={(entry) => `${entry.name}: ${entry.value}`}
+                >
+                  {riskDistribution.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.name === 'High Risk' ? '#FF3B30' : entry.name === 'Medium Risk' ? '#FF9F0A' : '#34C759'}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CyberCard>
+        </div>
+
+        {/* Transaction List */}
+        <CyberCard className="transactions-section">
+          <div className="section-title">
+            <Icons.List />
+            <h2>All Transactions ({filteredTransactions.length})</h2>
+          </div>
+          
+          <div className="transactions-scroll">
+            {filteredTransactions.map((tx, i) => (
+              <motion.div
+                key={i}
+                className={`transaction-item ${riskClass(tx.risk_score)}`}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.01 }}
+              >
+                <div className="tx-info">
+                  <div className="tx-header">
+                    <span className="tx-account">{tx.account}</span>
+                    <span className="tx-time">Just now</span>
+                  </div>
+                  <div className="tx-details">
+                    <span className="tx-location">📍 {tx.location}</span>
+                    <span className="tx-amount">₹{tx.amount.toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className={`risk-indicator ${riskClass(tx.risk_score)}`}>
+                  <div className="risk-score">{tx.risk_score}</div>
+                  <div className="risk-label">RISK</div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          
+          <div className="transactions-footer">
+            <div className="pagination">
+              <button className="page-btn">← Previous</button>
+              <span className="page-info">1 of {Math.ceil(filteredTransactions.length / 50)}</span>
+              <button className="page-btn">Next →</button>
+            </div>
+            <button className="export-btn">Export CSV</button>
+          </div>
+        </CyberCard>
+      </div>
+    </div>
+  );
+}
+
+// ==================== MAIN DASHBOARD ====================
+function MainDashboard() {
   const [unlocked, setUnlocked] = useState(
     sessionStorage.getItem("unlocked") === "true"
   );
@@ -119,6 +473,8 @@ export default function App() {
     mediumRisk: 0,
     lowRisk: 0
   });
+  
+  const navigate = useNavigate();
 
   // Splash screen with enhanced animation
   useEffect(() => {
@@ -311,7 +667,6 @@ export default function App() {
           <Icons.Apple />
           <h1 className="dashboard-title">
             <span className="gradient-text">Quantum Fraud Intelligence</span>
-            
           </h1>
         </div>
         <div className="header-right">
@@ -485,6 +840,16 @@ export default function App() {
         </div>
       </div>
 
+      {/* Analytics Button */}
+      <motion.button
+        className="analytics-btn"
+        onClick={() => navigate('/analytics')}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        📊 View Full Analytics
+      </motion.button>
+
       {/* Account Details Modal */}
       <AnimatePresence>
         {showDetails && (
@@ -551,5 +916,17 @@ export default function App() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ==================== MAIN APP COMPONENT ====================
+export default function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<MainDashboard />} />
+        <Route path="/analytics" element={<TransactionAnalytics />} />
+      </Routes>
+    </Router>
   );
 }
