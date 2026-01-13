@@ -1,56 +1,84 @@
 from fastapi import FastAPI
-import subprocess
-import json
-import os
-
-from ml.features import build_features
-from ml.supervised import fraud_probability
+from fastapi.middleware.cors import CORSMiddleware
+import random
 
 app = FastAPI()
 
+# ---------------- CORS ----------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CPP_ENGINE_PATH = os.path.join(BASE_DIR, "rules", "rule_engine")
-
-
-def run_cpp_engine(transactions):
-    payload = {
-        "transactions": transactions
+# ---------------- SAMPLE DATA ----------------
+transactions = [
+    {
+        "account": f"ACC{1000 + i}",
+        "amount": random.randint(1000, 500000),
+        "location": random.choice(["Delhi", "Mumbai", "Bangalore", "Pune"])
     }
+    for i in range(200)
+]
 
-    result = subprocess.run(
-        [CPP_ENGINE_PATH],
-        input=json.dumps(payload),
-        text=True,
-        capture_output=True,
-        check=True
-    )
+# ---------------- ROOT ----------------
+@app.get("/")
+def root():
+    return {"status": "Backend running"}
 
-    return json.loads(result.stdout)
+# ---------------- BULK TRANSACTIONS ----------------
+@app.get("/bulk")
+def bulk():
+    enriched = []
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+    for t in transactions:
+        risk_score = round(
+            min(10, (t["amount"] / 50000) + random.uniform(0, 2)),
+            2
+        )
 
-@app.post("/analyze")
-def analyze(request: dict):
-    transactions = request["transactions"]
+        if risk_score >= 7:
+            risk_label = "High"
+        elif risk_score >= 4:
+            risk_label = "Medium"
+        else:
+            risk_label = "Low"
 
-    cpp_result = run_cpp_engine(transactions)
-
-    # Run ML on latest transaction
-    features = build_features(transactions[-1])
-    ml_prob = fraud_probability(features)
-
-    # Hybrid decision logic
-    final_decision = cpp_result["final_status"]
-    if ml_prob > 0.85:
-        final_decision = "Suspicious"
+        enriched.append({
+            "account": t["account"],
+            "amount": t["amount"],
+            "location": t["location"],
+            "risk_score": risk_score,
+            "risk_level": risk_label
+        })
 
     return {
-        "final_decision": final_decision,
-        "rule_engine": cpp_result,
-        "ml_probability": float(round(ml_prob, 3))
+        "count": len(enriched),
+        "transactions": enriched
     }
 
+# ---------------- ACCOUNT DETAILS ----------------
+@app.get("/account/{account_id}")
+def account_details(account_id: str):
+    account_tx = [
+        t for t in transactions if t["account"] == account_id
+    ]
+
+    if not account_tx:
+        return {"error": "Account not found"}
+
+    total_amount = sum(t["amount"] for t in account_tx)
+    avg_risk = round(
+        sum((t["amount"] / 50000) for t in account_tx) / len(account_tx),
+        2
+    )
+
+    return {
+        "account": account_id,
+        "total_transactions": len(account_tx),
+        "total_amount": total_amount,
+        "average_risk_score": avg_risk,
+        "transactions": account_tx
+    }
